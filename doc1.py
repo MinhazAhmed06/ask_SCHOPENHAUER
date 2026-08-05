@@ -118,7 +118,7 @@ def extract_rag_documents(pdf_path: str):
 
         # Extract text blocks dynamically without hard coordinate cropping
         blocks = page.get_text("blocks")
-        body_parts = []
+        body_blocks = []
 
         for b in blocks:
             x0, y0, x1, y1, text_str, block_no, block_type = b
@@ -129,9 +129,26 @@ def extract_rag_documents(pdf_path: str):
             if is_header_block(y0, text_str) or is_footer_block(y0, text_str):
                 continue
 
-            body_parts.append(text_str.strip())
+            body_blocks.append(b)
 
-        raw_page_text = "\n\n".join(body_parts)
+        if not body_blocks:
+            continue
+
+        # Detect left margin baseline x0 for paragraph indentation detection
+        x0_coords = [b[0] for b in body_blocks]
+        min_x0 = min(x0_coords) if x0_coords else 0
+
+        # Build text stream: indented blocks (x0 > min_x0 + 5) start a new paragraph (\n\n)
+        lines_with_breaks = []
+        for b in body_blocks:
+            x0 = b[0]
+            text_str = b[4].strip()
+            if x0 > min_x0 + 5:
+                lines_with_breaks.append("\n\n" + text_str)
+            else:
+                lines_with_breaks.append("\n" + text_str)
+
+        raw_page_text = "".join(lines_with_breaks).strip()
         cleaned_text = fix_ocr_formatting(raw_page_text)
 
         # Skip Table of Contents pages & empty/corrupt pages
@@ -140,8 +157,8 @@ def extract_rag_documents(pdf_path: str):
 
         section, chapter = get_chapter_info(book_page_num)
 
-        # Build clean structured payload
-        structured_content = f"[{section} -> {chapter}]\n{cleaned_text}"
+        # Build clean structured payload (100% pure text without redundant header prefix)
+        structured_content = cleaned_text
 
         metadata = {
             "source": pdf_path,
@@ -149,6 +166,8 @@ def extract_rag_documents(pdf_path: str):
             "book_page": book_page_num,
             "section": section,
             "chapter": chapter,
+            "written_year": 1851,
+            "author_age": 63,
             "char_count": len(cleaned_text),
             "word_count": len(cleaned_text.split())
         }

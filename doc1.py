@@ -39,28 +39,48 @@ def is_header_block(y0: float, text_str: str) -> bool:
     """Dynamically detects running headers at top of page (y0 < 55pt)."""
     if y0 > 55:
         return False
-    text_upper = text_str.upper().strip()
+    text_clean = text_str.upper().strip()
+    
+    # Normalize common OCR digit misreads (e.g. '3o6' -> '306', 'i6o' -> '160', '3io' -> '310')
+    normalized = re.sub(r'[oO]', '0', text_clean)
+    normalized = re.sub(r'[iIl]', '1', normalized)
     lines = [l.strip() for l in text_str.split("\n") if l.strip()]
     
     # Matches running headers with page numbers or book title keywords
-    if any(re.search(r"^\d+$", l) or re.search(r"^[ivxlcdm]+$", l, re.I) for l in lines):
-        keywords = [
-            "WISDOM OF LIFE", "SCHOPENHAUER", "ESSAYS", "DIVISION", 
-            "SUBJECT", "PERSONALITY", "PROPERTY", "POSITION", 
-            "ETHICS", "SUICIDE", "PHILOSOPHY"
-        ]
-        if any(w in text_upper for w in keywords):
+    keywords = [
+        "WISDOM OF LIFE", "SCHOPENHAUER", "ESSAYS", "DIVISION", 
+        "SUBJECT", "PERSONALITY", "PROPERTY", "POSITION", 
+        "ETHICS", "SUICIDE", "PHILOSOPHY"
+    ]
+    
+    if any(w in text_clean for w in keywords):
+        return True
+
+    for l in lines:
+        l_norm = re.sub(r'[oO]', '0', re.sub(r'[iIl]', '1', l))
+        if re.search(r"^\(?\s*\d+\s*\)?$", l_norm) or re.search(r"^\(?\s*[ivxlcdm]+\s*\)?$", l_norm, re.I):
             return True
-        if len(lines) <= 2 and (lines[0].isdigit() or lines[-1].isdigit() or re.match(r"^[ivxlcdm]+$", lines[0], re.I)):
+
+    if len(lines) <= 2:
+        first_norm = re.sub(r'[oO]', '0', re.sub(r'[iIl]', '1', lines[0]))
+        last_norm = re.sub(r'[oO]', '0', re.sub(r'[iIl]', '1', lines[-1]))
+        if re.match(r"^\(?\s*\d+\s*\)?$", first_norm) or re.match(r"^\(?\s*\d+\s*\)?$", last_norm):
             return True
+
     return False
 
 def is_footer_block(y0: float, text_str: str) -> bool:
-    """Dynamically detects standalone page numbers at bottom of page (y0 > 520pt)."""
+    """Dynamically detects standalone page numbers/footers at bottom of page (y0 > 520pt)."""
     if y0 < 520:
         return False
     text_clean = text_str.strip()
-    if re.match(r"^\(?\s*\d+\s*\)?$", text_clean) or re.match(r"^\(?\s*[ivxlcdm]+\s*\)?$", text_clean, re.I):
+    # Normalize OCR digit misreads (e.g. '(5i)' -> '(51)', '(IOI)' -> '(101)')
+    norm = re.sub(r'[oO]', '0', text_clean)
+    norm = re.sub(r'[iIl]', '1', norm)
+    
+    if re.match(r"^\(?\s*\d+\s*\)?$", norm) or re.match(r"^\(?\s*[ivxlcdm]+\s*\)?$", norm, re.I):
+        return True
+    if re.match(r"^\(?\s*[ivxlcdm01\s()]+\)?$", norm, re.I) and len(norm) <= 8:
         return True
     return False
 
@@ -70,12 +90,12 @@ def fix_ocr_formatting(text: str) -> str:
     1. Fixes OCR quote symbol misinterpretations (<(, ®, ((, «, » -> quotes).
     2. Rejoins hyphenated words split across lines (e.g. "suf-\nfered" -> "suffered").
     3. Collapses intra-paragraph line breaks into spaces while preserving paragraph breaks.
-    4. Cleans residual running header noise and normalizes whitespace.
+    4. Normalizes whitespace without destroying valid body text.
     """
     if not text:
         return ""
 
-    # 1. Standardize OCR quote symbols without replacing valid words (no 'w ' bug!)
+    # 1. Standardize OCR quote symbols without replacing valid words
     text = re.sub(r'<\(|\(\(|«', '"', text)
     text = re.sub(r'®|»', '"', text)
     text = text.replace('“', '"').replace('”', '"').replace('‘', "'").replace('’', "'")
@@ -96,10 +116,7 @@ def fix_ocr_formatting(text: str) -> str:
 
     cleaned_text = "\n\n".join(cleaned_paragraphs)
 
-    # 4. Remove lingering running header noise if present
-    cleaned_text = re.sub(r"(?i)THE WISDOM OF LIFE|SCHOPENHAUER'S ESSAYS", "", cleaned_text)
-    
-    # 5. Collapse multi-line breaks to standard double newline
+    # 4. Collapse multi-line breaks to standard double newline
     cleaned_text = re.sub(r'\n{3,}', '\n\n', cleaned_text)
 
     return cleaned_text.strip()

@@ -194,6 +194,94 @@ def extract_rag_documents(pdf_path: str):
     doc.close()
     return documents
 
+def aggregate_documents_by_chapter(documents):
+    """
+    Groups page-level Document objects by (section, chapter) into clean chapter-level objects.
+    Rejoins text streams seamlessly across page breaks (handling cross-page hyphenated words).
+    """
+    chapter_groups = []
+    current_key = None
+    current_docs = []
+
+    for doc in documents:
+        key = (doc.metadata["section"], doc.metadata["chapter"])
+        if key != current_key:
+            if current_docs:
+                chapter_groups.append(current_docs)
+            current_key = key
+            current_docs = [doc]
+        else:
+            current_docs.append(doc)
+
+    if current_docs:
+        chapter_groups.append(current_docs)
+
+    chapter_objects = []
+
+    for doc_group in chapter_groups:
+        source_path = doc_group[0].metadata["source"]
+        section = doc_group[0].metadata["section"]
+        chapter = doc_group[0].metadata["chapter"]
+        
+        start_book_page = doc_group[0].metadata["book_page"]
+        end_book_page = doc_group[-1].metadata["book_page"]
+        start_pdf_page = doc_group[0].metadata["pdf_page"]
+        end_pdf_page = doc_group[-1].metadata["pdf_page"]
+        total_pages = len(doc_group)
+
+        # Concatenate text across pages with cross-page hyphenation rejoining
+        combined_text = ""
+        for doc in doc_group:
+            page_text = doc.page_content.strip()
+            if not page_text:
+                continue
+
+            if not combined_text:
+                combined_text = page_text
+            else:
+                # Check if combined_text ends with a hyphenated word across page boundary (e.g. "subjec-")
+                if re.search(r'\w+-\s*$', combined_text) and re.match(r'^\w+', page_text):
+                    combined_text = re.sub(r'(\w+)-\s*$', r'\1', combined_text)
+                    first_space = page_text.find(' ')
+                    if first_space != -1:
+                        word_part = page_text[:first_space]
+                        rest = page_text[first_space:]
+                        combined_text += word_part + rest
+                    else:
+                        combined_text += page_text
+                # Check if previous page text ends with paragraph break
+                elif combined_text.endswith('\n\n') or page_text.startswith('\n\n'):
+                    combined_text = combined_text.rstrip() + "\n\n" + page_text.lstrip()
+                else:
+                    # Single space joining across page break
+                    combined_text += " " + page_text
+
+        # Clean any remaining double spaces or excess newlines
+        cleaned_chapter_text = re.sub(r'[ \t]+', ' ', combined_text).strip()
+        cleaned_chapter_text = re.sub(r'\n{3,}', '\n\n', cleaned_chapter_text)
+
+        book_pages_str = f"{start_book_page}-{end_book_page}" if start_book_page != end_book_page else f"{start_book_page}"
+        pdf_pages_str = f"{start_pdf_page}-{end_pdf_page}" if start_pdf_page != end_pdf_page else f"{start_pdf_page}"
+
+        chapter_obj = {
+            "chapter_content": cleaned_chapter_text,
+            "metadata": {
+                "source": source_path,
+                "section": section,
+                "chapter": chapter,
+                "book_pages": book_pages_str,
+                "pdf_pages": pdf_pages_str,
+                "total_pages": total_pages,
+                "written_year": 1851,
+                "author_age": 63,
+                "char_count": len(cleaned_chapter_text),
+                "word_count": len(cleaned_chapter_text.split())
+            }
+        }
+        chapter_objects.append(chapter_obj)
+
+    return chapter_objects
+
 if __name__ == "__main__":
     pdf_file = "docs/wisdomoflife01scho.pdf"
     docs = extract_rag_documents(pdf_file)
@@ -207,11 +295,18 @@ if __name__ == "__main__":
         for doc in docs
     ]
 
-    # Save to a formatted JSON file
-    output_filename = "rag_documents_output.json"
-    with open(output_filename, "w", encoding="utf-8") as f:
+    # 1. Save page-level documents
+    page_output_filename = "rag_documents_output.json"
+    with open(page_output_filename, "w", encoding="utf-8") as f:
         json.dump(docs_to_dict, f, indent=2, ensure_ascii=False)
+    print(f"Saved {len(docs)} clean page documents to {page_output_filename}")
 
-    print(f"Saved {len(docs)} clean documents to {output_filename}")
+    # 2. Save chapter-level aggregated documents
+    chapters_data = aggregate_documents_by_chapter(docs)
+    chapter_output_filename = "rag_chapters_output.json"
+    with open(chapter_output_filename, "w", encoding="utf-8") as f:
+        json.dump(chapters_data, f, indent=2, ensure_ascii=False)
+    print(f"Saved {len(chapters_data)} section & chapter-wise documents to {chapter_output_filename}")
+
 
 

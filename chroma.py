@@ -19,7 +19,7 @@ def chroma_search(query):
         query_texts = [query],
         n_results = 2
     )
-    for doc, dist in zip(results["documents"], results["distances"]):
+    for doc, dist in zip(results["documents"][0], results["distances"][0]):
         print(f"\n\n{doc} - distance {dist:.4f}")
 
 def metadata_filter(query):
@@ -29,7 +29,7 @@ def metadata_filter(query):
         # where = {'chapter':'On Suicide'},
         # where_document = {'$contains':'suicide'}
     )
-    for doc in zip(results["documents"]):
+    for doc in zip(results["documents"][0]):
         print(f"\n\n{doc}")
 
 chroma_search('why do people commit suicide')

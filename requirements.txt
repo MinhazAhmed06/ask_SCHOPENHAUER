@@ -8,4 +8,4 @@ langchain-chroma
 langchain-experimental
 python-dotenv
 pymupdf
-sentence-transformer
+rank-bm25

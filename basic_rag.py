@@ -17,13 +17,18 @@ load_dotenv()
 with open('rag_chapters_output.json', 'r', encoding='utf-8') as file:
     data = json.load(file)
 
-KNOWLEDGE_BASE = list(chapter["chapter_content"] for chapter in data)
+documents = [
+    Document(
+        page_content=item["chapter_content"],
+        metadata=item["metadata"], 
+    )
+    for item in data
+]
 embedding_model = HuggingFaceEmbeddings()
 
 def rec_knowbase():
-    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-    doc = Document(page_content=KNOWLEDGE_BASE[0])
-    chunks = splitter.split_documents([doc])
+    splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50, separators=["\n\n", "\n", " ", ""])
+    chunks = splitter.split_documents(documents)
 
     vector_store = Chroma.from_documents(
         documents = chunks,
@@ -50,7 +55,7 @@ Question: {question}
 
 Answer:
 
-make sure to answer in a precise manner and if you dont know the answer just say "I don't know".
+make sure to answer in a precise manner and if you dont know the answer just say "I don't know". Return the answer in a clean format.
 """        
     )
 

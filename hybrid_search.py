@@ -1,9 +1,5 @@
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.output_parsers import StrOutputParser
-from langchain_openrouter import ChatOpenRouter
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
@@ -46,7 +42,7 @@ bm25_retriever = BM25Retriever.from_documents(
 
 ensemble_retriever = EnsembleRetriever(
     retrievers=[bm25_retriever,vector_retriever],
-    weights=[0.5,0.5]
+    weights=[0.3,0.7]
 )
 
 

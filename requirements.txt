@@ -9,3 +9,4 @@ langchain-experimental
 python-dotenv
 pymupdf
 rank-bm25
+tiktoken
